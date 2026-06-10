@@ -5,21 +5,60 @@ from schemas.reimbursement import Reimbursement
 
 class ZohoExpenseService:
     def __init__(self):
-        self.base_url = "https://books.zoho.in/api/v3/expenses"
+        self.base_url = "https://www.zohoapis.com/books/v3/expenses"
         self.org_id = settings.ZOHO_ORGANIZATION_ID
-        self.token = self._get_access_token()
 
-    def _get_access_token(self) -> str:
+    def _load_tokens(self) -> dict:
         try:
             with open(settings.TOKENS_JSON_PATH, 'r') as f:
-                tokens = json.load(f)
-                return tokens.get("access_token", "")
+                return json.load(f)
         except Exception:
-            return ""
+            return {}
+
+    async def get_valid_access_token(self) -> str:
+        import time
+        tokens = self._load_tokens()
+        access_token = tokens.get("access_token", "")
+        refresh_token = tokens.get("refresh_token", "")
+        expires_at = tokens.get("expires_at", 0)
+
+        if not access_token or not refresh_token:
+            raise Exception("Tokens are missing. Please run auth_setup.py")
+
+        # Buffer of 60 seconds
+        if time.time() > (expires_at - 60):
+            print("Access token is expired or expiring soon. Refreshing...")
+            url = "https://accounts.zoho.com/oauth/v2/token"
+            data = {
+                "refresh_token": refresh_token,
+                "client_id": settings.ZOHO_CLIENT_ID,
+                "client_secret": settings.ZOHO_CLIENT_SECRET,
+                "grant_type": "refresh_token"
+            }
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, data=data)
+                response.raise_for_status()
+                resp_data = response.json()
+                
+                if "error" in resp_data:
+                    raise Exception(f"OAuth Refresh Error: {resp_data['error']}")
+                    
+                tokens["access_token"] = resp_data["access_token"]
+                if "refresh_token" in resp_data:
+                    tokens["refresh_token"] = resp_data["refresh_token"]
+                tokens["expires_at"] = time.time() + resp_data.get("expires_in", 3600)
+                
+                with open(settings.TOKENS_JSON_PATH, 'w') as f:
+                    json.dump(tokens, f)
+                print("Successfully refreshed access token.")
+                return tokens["access_token"]
+        
+        return access_token
 
     async def sync_expense(self, reimbursement: Reimbursement) -> dict:
+        token = await self.get_valid_access_token()
         headers = {
-            "Authorization": f"Zoho-oauthtoken {self.token}"
+            "Authorization": f"Zoho-oauthtoken {token}"
             # Content-Type is set automatically by httpx when using files/data
         }
         
@@ -33,11 +72,7 @@ class ZohoExpenseService:
             "gst_treatment": settings.ZOHO_DEFAULT_GST_TREATMENT,
             "source_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
             "destination_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
-            "description": f"Employee: {reimbursement.employee_name}\nDescription: {reimbursement.brief_description or reimbursement.nature_of_expense}\nAdmin Remarks: {reimbursement.remarks or 'None'}",
-            "custom_fields": [
-                {"label": "Employee Name", "value": reimbursement.employee_name},
-                {"label": "Business Category", "value": reimbursement.business_category}
-            ]
+            "description": f"Employee: {reimbursement.employee_name}\nDescription: {reimbursement.brief_description or reimbursement.nature_of_expense}\nAdmin Remarks: {reimbursement.remarks or 'None'}"
         }
 
         async with httpx.AsyncClient() as client:
