@@ -26,43 +26,49 @@ async def run_zoho_sync(reimbursement: Reimbursement, zoho_service: ZohoExpenseS
             zoho_sync_status="success"
         )
     except Exception as e:
+        updated_remarks = f"{reimbursement.remarks or ''}\n[Zoho Sync Error]: {str(e)}".strip()
         reimbursement_service.update_status(
             str(reimbursement.id),
             ReimbursementStatus.approved,
             admin_id,
             zoho_sync_status="failed",
-            remarks=str(e)
+            remarks=updated_remarks
         )
 
-@router.post("/reimbursements/{id}/approve", response_model=Reimbursement)
-def approve_reimbursement(
+class StatusUpdateRequest(BaseModel):
+    status: str
+    remarks: str | None = None
+    approved_amount: float | None = None
+
+@router.put("/reimbursements/{id}/status", response_model=Reimbursement)
+def update_reimbursement_status(
     id: UUID,
+    payload: StatusUpdateRequest,
     background_tasks: BackgroundTasks,
     admin = Depends(get_current_admin),
     reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
     zoho_service: ZohoExpenseService = Depends(get_zoho_service)
 ):
-    result = reimbursement_service.update_status(
-        str(id),
-        ReimbursementStatus.approved,
-        str(admin.id),
-        reviewed_accepted=True
-    )
-    background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
-    return result
-
-@router.post("/reimbursements/{id}/reject", response_model=Reimbursement)
-def reject_reimbursement(
-    id: UUID,
-    admin = Depends(get_current_admin),
-    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service)
-):
-    return reimbursement_service.update_status(
-        str(id),
-        ReimbursementStatus.rejected,
-        str(admin.id),
-        reviewed_accepted=False
-    )
+    if payload.status == "Approved":
+        result = reimbursement_service.update_status(
+            str(id),
+            ReimbursementStatus.approved,
+            str(admin.id),
+            reviewed_accepted=True,
+            remarks=payload.remarks,
+            approved_amount=payload.approved_amount
+        )
+        background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
+        return result
+    elif payload.status == "Rejected":
+        return reimbursement_service.update_status(
+            str(id),
+            ReimbursementStatus.rejected,
+            str(admin.id),
+            reviewed_accepted=False,
+            remarks=payload.remarks
+        )
+    raise HTTPException(status_code=400, detail="Invalid status")
 
 class MarkPaidRequest(BaseModel):
     paid_on: date

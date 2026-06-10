@@ -15,9 +15,10 @@ class Settings(BaseSettings):
     ADMIN_EMAILS: str = ""
 
     # Zoho specific defaults
-    ZOHO_DEFAULT_GST_TREATMENT: str = "Unregistered Business"
-    ZOHO_DEFAULT_SOURCE_OF_SUPPLY: str = "Karnataka"
-    ZOHO_DEFAULT_PAID_THROUGH: str = "Employee Reimbursements"
+    ZOHO_TRAVEL_ACCOUNT_ID: str = ""
+    ZOHO_REIMBURSEMENT_ACCOUNT_ID: str = ""
+    ZOHO_DEFAULT_GST_TREATMENT: str = "business_none"
+    ZOHO_DEFAULT_SOURCE_OF_SUPPLY: str = "KA"
 
     class Config:
         env_file = ".env"

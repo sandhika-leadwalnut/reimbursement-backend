@@ -19,20 +19,21 @@ class ZohoExpenseService:
 
     async def sync_expense(self, reimbursement: Reimbursement) -> dict:
         headers = {
-            "Authorization": f"Zoho-oauthtoken {self.token}",
-            "Content-Type": "application/json"
+            "Authorization": f"Zoho-oauthtoken {self.token}"
+            # Content-Type is set automatically by httpx when using files/data
         }
         
-        payload = {
+        expense_data = {
             "date": reimbursement.bill_date.isoformat(),
-            "account_id": "", # In a real implementation we would map nature_of_expense to a Zoho Account ID
+            "account_id": settings.ZOHO_TRAVEL_ACCOUNT_ID,
+            "paid_through_account_id": settings.ZOHO_REIMBURSEMENT_ACCOUNT_ID,
             "amount": reimbursement.approved_amount or reimbursement.amount,
-            "currency_id": "", # Need default currency ID
-            "description": reimbursement.brief_description or reimbursement.nature_of_expense,
-            "reference_number": reimbursement.bill_number,
+            "is_inclusive_tax": False,
+            "reference_number": reimbursement.bill_number or "",
             "gst_treatment": settings.ZOHO_DEFAULT_GST_TREATMENT,
             "source_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
-            "paid_through_account_id": "", # Should map "Employee Reimbursements" to its account ID
+            "destination_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
+            "description": f"Employee: {reimbursement.employee_name}\nDescription: {reimbursement.brief_description or reimbursement.nature_of_expense}\nAdmin Remarks: {reimbursement.remarks or 'None'}",
             "custom_fields": [
                 {"label": "Employee Name", "value": reimbursement.employee_name},
                 {"label": "Business Category", "value": reimbursement.business_category}
@@ -40,9 +41,27 @@ class ZohoExpenseService:
         }
 
         async with httpx.AsyncClient() as client:
+            files = {}
+            if reimbursement.document_url:
+                try:
+                    # Fetch document content to upload
+                    doc_response = await client.get(reimbursement.document_url)
+                    doc_response.raise_for_status()
+                    filename = reimbursement.document_url.split("/")[-1]
+                    if '?' in filename:
+                        filename = filename.split('?')[0]
+                    files["receipt"] = (filename, doc_response.content)
+                except Exception as e:
+                    print(f"Warning: Could not fetch document for Zoho upload: {e}")
+
+            data = {
+                "JSONString": json.dumps(expense_data)
+            }
+            
             response = await client.post(
                 f"{self.base_url}?organization_id={self.org_id}",
-                json=payload,
+                data=data,
+                files=files if files else None,
                 headers=headers
             )
             response.raise_for_status()
