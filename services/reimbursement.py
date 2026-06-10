@@ -14,7 +14,7 @@ class ReimbursementService:
         self.audit_service = audit_service
 
     def create(self, data: ReimbursementCreate, employee_id: str, employee_email: str, employee_name: str, document_url: str) -> Reimbursement:
-        payload = data.model_dump()
+        payload = data.model_dump(mode='json')
         payload.update({
             "employee_id": employee_id,
             "employee_email": employee_email,
@@ -42,7 +42,7 @@ class ReimbursementService:
         if str(existing.employee_id) == user_id and existing.status != ReimbursementStatus.pending_review:
              raise HTTPException(status_code=400, detail="Cannot update unless pending review")
 
-        update_data = data.model_dump(exclude_unset=True)
+        update_data = data.model_dump(mode='json', exclude_unset=True)
         if not update_data:
             return existing
 

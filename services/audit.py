@@ -20,4 +20,4 @@ class AuditService:
             new_value=new_value,
             performed_by=performed_by
         )
-        self.repository.create(audit_data.model_dump(exclude_none=True))
+        self.repository.create(audit_data.model_dump(mode='json', exclude_none=True))

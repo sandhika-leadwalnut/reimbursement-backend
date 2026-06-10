@@ -23,7 +23,10 @@ def get_auth_service(repo: ProfileRepository = Depends(get_profile_repo)) -> Aut
 def get_audit_service(repo: AuditLogRepository = Depends(get_audit_repo)) -> AuditService:
     return AuditService(repo)
 
-def get_storage_service(client: Client = Depends(get_db_client)) -> StorageService:
+from core.supabase import get_service_client
+
+def get_storage_service() -> StorageService:
+    client = get_service_client()
     return StorageService(client)
 
 def get_reimbursement_service(repo: ReimbursementRepository = Depends(get_reimbursement_repo), 

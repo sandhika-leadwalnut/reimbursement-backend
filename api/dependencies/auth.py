@@ -6,14 +6,16 @@ from core.config import settings
 
 security = HTTPBearer()
 
-def get_db_client(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Client:
-    token = credentials.credentials
+def get_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
+
+def get_db_client(token: str = Depends(get_token)) -> Client:
     client = get_supabase_client(token)
     return client
 
-def get_current_user(client: Client = Depends(get_db_client)):
+def get_current_user(token: str = Depends(get_token), client: Client = Depends(get_db_client)):
     try:
-        user = client.auth.get_user()
+        user = client.auth.get_user(token)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         return user.user
