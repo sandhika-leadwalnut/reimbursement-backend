@@ -7,6 +7,7 @@ class UserRole(str, Enum):
 class ReimbursementStatus(str, Enum):
     pending_review = "Pending Review"
     under_review = "Under Review"
+    need_further_clarification = "Need Further Clarification"
     approved = "Approved"
     sent_to_zoho = "Sent To Zoho"
     paid = "Paid"
@@ -21,3 +22,7 @@ class AuditAction(str, Enum):
     payment_update = "Payment Update"
     soft_delete = "Soft Delete"
     restore = "Restore"
+    clarification_requested = "Clarification Requested"
+    clarification_updated = "Clarification Updated"
+    payment_date_assigned = "Payment Date Assigned"
+    export_generated = "Export Generated"

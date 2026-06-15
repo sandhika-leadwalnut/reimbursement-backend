@@ -7,6 +7,7 @@ from schemas.audit import AuditAction
 from models.enums import ReimbursementStatus
 from repositories.impl import ReimbursementRepository
 from services.audit import AuditService
+from utils.payment_calc import calculate_payment_date
 
 class ReimbursementService:
     def __init__(self, repository: ReimbursementRepository, audit_service: AuditService):
@@ -38,11 +39,14 @@ class ReimbursementService:
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
 
-        # if employee is updating, ensure it's pending review
-        if str(existing.employee_id) == user_id and existing.status != ReimbursementStatus.pending_review:
-             raise HTTPException(status_code=400, detail="Cannot update unless pending review")
+        # if employee is updating, ensure it's pending review or need_further_clarification
+        if str(existing.employee_id) == user_id and existing.status not in [ReimbursementStatus.pending_review, ReimbursementStatus.need_further_clarification]:
+             raise HTTPException(status_code=400, detail="Cannot update unless pending review or need further clarification")
 
+        # Automatically update status back to under review if it was clarified
         update_data = data.model_dump(mode='json', exclude_unset=True)
+        if existing.status == ReimbursementStatus.need_further_clarification:
+            update_data["status"] = ReimbursementStatus.under_review.value
         if not update_data:
             return existing
 
@@ -50,7 +54,7 @@ class ReimbursementService:
         
         self.audit_service.log_action(
             reimbursement_id=result.id,
-            action=AuditAction.update,
+            action=AuditAction.update if existing.status != ReimbursementStatus.need_further_clarification else AuditAction.clarification_updated,
             old_value=existing.model_dump(mode='json'),
             new_value=result.model_dump(mode='json'),
             performed_by=uuid.UUID(user_id)
@@ -63,6 +67,12 @@ class ReimbursementService:
             raise HTTPException(status_code=404, detail="Not found")
 
         update_data = {"status": status.value}
+        if status == ReimbursementStatus.approved:
+            # Calculate payment date
+            # Ensure existing object has submission_date
+            payment_date = calculate_payment_date(existing.submission_date)
+            update_data["expected_payment_date"] = payment_date.isoformat()
+
         update_data.update(kwargs)
 
         result = self.repository.update(id, update_data)
@@ -72,6 +82,8 @@ class ReimbursementService:
             action = AuditAction.approve
         elif status == ReimbursementStatus.rejected:
             action = AuditAction.reject
+        elif status == ReimbursementStatus.need_further_clarification:
+            action = AuditAction.clarification_requested
 
         self.audit_service.log_action(
             reimbursement_id=result.id,
