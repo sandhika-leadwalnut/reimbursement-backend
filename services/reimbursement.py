@@ -15,6 +15,9 @@ class ReimbursementService:
         self.audit_service = audit_service
 
     def create(self, data: ReimbursementCreate, employee_id: str, employee_email: str, employee_name: str, document_url: str) -> Reimbursement:
+        today = datetime.utcnow().date()
+        payment_date = calculate_payment_date(today)
+
         payload = data.model_dump(mode='json')
         payload.update({
             "employee_id": employee_id,
@@ -22,6 +25,7 @@ class ReimbursementService:
             "employee_name": employee_name,
             "document_url": document_url,
             "status": ReimbursementStatus.pending_review.value,
+            "expected_payment_date": payment_date.isoformat(),
         })
         # Note: pydantic objects use enum values
         result = self.repository.create(payload)
@@ -67,11 +71,6 @@ class ReimbursementService:
             raise HTTPException(status_code=404, detail="Not found")
 
         update_data = {"status": status.value}
-        if status == ReimbursementStatus.approved:
-            # Calculate payment date
-            # Ensure existing object has submission_date
-            payment_date = calculate_payment_date(existing.submission_date)
-            update_data["expected_payment_date"] = payment_date.isoformat()
 
         update_data.update(kwargs)
 
