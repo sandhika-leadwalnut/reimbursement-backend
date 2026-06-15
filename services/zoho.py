@@ -15,6 +15,21 @@ class ZohoExpenseService:
         except Exception:
             return {}
 
+    def _get_account_id_for_expense(self, nature_of_expense: str) -> str:
+        nature = nature_of_expense.lower()
+        if "taxi" in nature or "auto" in nature or "travel" in nature:
+            return settings.ZOHO_LEDGER_TRAVEL_EXPENSES
+        elif "hotel" in nature or "stay" in nature:
+            return settings.ZOHO_LEDGER_BOARDING_LODGING
+        elif "office" in nature or "repair" in nature:
+            return settings.ZOHO_LEDGER_OFFICE_EXPENSES
+        elif "food" in nature or "fitness" in nature or "recreation" in nature:
+            return settings.ZOHO_LEDGER_STAFF_WELFARE
+        elif "subscription" in nature or "tool" in nature:
+            return settings.ZOHO_LEDGER_SUBSCRIPTION_COST
+        else:
+            return settings.ZOHO_LEDGER_MISC_EXPENSES
+
     async def get_valid_access_token(self) -> str:
         import time
         tokens = self._load_tokens()
@@ -64,7 +79,7 @@ class ZohoExpenseService:
         
         expense_data = {
             "date": reimbursement.bill_date.isoformat(),
-            "account_id": settings.ZOHO_TRAVEL_ACCOUNT_ID,
+            "account_id": self._get_account_id_for_expense(reimbursement.nature_of_expense),
             "paid_through_account_id": settings.ZOHO_REIMBURSEMENT_ACCOUNT_ID,
             "amount": reimbursement.approved_amount or reimbursement.amount,
             "is_inclusive_tax": False,
