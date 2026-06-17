@@ -12,5 +12,7 @@ def get_supabase_client(token: str = None) -> Client:
 def get_service_client() -> Client:
     # Requires service role key to bypass RLS, but here we can just use anon key if RLS allows or if we have service key in env
     # For now, if we use anon key it's subject to RLS
-    service_key = getattr(settings, 'SUPABASE_SERVICE_KEY', settings.SUPABASE_KEY)
+    service_key = getattr(settings, 'SUPABASE_SERVICE_KEY', None)
+    if not service_key:
+        service_key = settings.SUPABASE_KEY
     return create_client(settings.SUPABASE_URL, service_key)
