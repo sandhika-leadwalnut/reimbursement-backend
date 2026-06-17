@@ -1,0 +1,32 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Version control
+.git/
+.gitignore
+
+# Testing and scripts
+.pytest_cache/
+tests/
+test_scripts/
+
+# Deployment specifics
+.vercel/
+vercel.json
+
+# Local artifacts
+tokens.json
+zoho_accounts.json
+*.md
+
+# Migrations shouldn't necessarily be inside the running image unless running them on startup
+migrations/
