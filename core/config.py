@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     ZOHO_CLIENT_ID: str = ""
     ZOHO_CLIENT_SECRET: str = ""
     ZOHO_ORGANIZATION_ID: str = ""
-    TOKENS_JSON_PATH: str = "tokens.json"
 
     ADMIN_EMAILS: str = ""
 

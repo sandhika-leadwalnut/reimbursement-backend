@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import auth, reimbursements, admin
+from api import oauth
 from core.config import settings
 
 app = FastAPI(title="Reimbursement Management API", version="1.0.0")
@@ -25,6 +26,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(reimbursements.router)
 app.include_router(admin.router)
+app.include_router(oauth.router, prefix="/oauth", tags=["oauth"])
 
 @app.get("/health")
 def health_check():
