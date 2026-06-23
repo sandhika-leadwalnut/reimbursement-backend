@@ -52,8 +52,6 @@ class DashboardMetrics(BaseModel):
     pending_review: int
     under_review: int
     approved: int
-    sent_to_zoho: int
-    paid: int
     rejected: int
     total_amount: float
     total_approved_amount: float
