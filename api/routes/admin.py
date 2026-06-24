@@ -6,7 +6,8 @@ from models.enums import ReimbursementStatus
 from services.reimbursement import ReimbursementService
 from services.zoho import ZohoExpenseService
 from api.dependencies.auth import get_current_admin
-from api.dependencies.services import get_reimbursement_service, get_zoho_service, get_reimbursement_repo
+from api.dependencies.services import get_reimbursement_service, get_zoho_service, get_reimbursement_repo, get_email_service
+from services.email import EmailService
 from repositories.impl import ReimbursementRepository
 import asyncio
 from datetime import date
@@ -47,7 +48,8 @@ def update_reimbursement_status(
     background_tasks: BackgroundTasks,
     admin = Depends(get_current_admin),
     reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
-    zoho_service: ZohoExpenseService = Depends(get_zoho_service)
+    zoho_service: ZohoExpenseService = Depends(get_zoho_service),
+    email_service: EmailService = Depends(get_email_service)
 ):
     if payload.status == "Approved":
         result = reimbursement_service.update_status(
@@ -59,15 +61,51 @@ def update_reimbursement_status(
             approved_amount=payload.approved_amount
         )
         background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
+        
+        background_tasks.add_task(
+            email_service.send_reimbursement_update,
+            result.employee_email,
+            result.employee_name,
+            "Approved",
+            str(result.id),
+            result.remarks,
+            result.expected_payment_date.isoformat() if result.expected_payment_date else None
+        )
         return result
     elif payload.status == "Rejected":
-        return reimbursement_service.update_status(
+        result = reimbursement_service.update_status(
             str(id),
             ReimbursementStatus.rejected,
             str(admin.id),
             reviewed_accepted=False,
             remarks=payload.remarks
         )
+        background_tasks.add_task(
+            email_service.send_reimbursement_update,
+            result.employee_email,
+            result.employee_name,
+            "Rejected",
+            str(result.id),
+            result.remarks
+        )
+        return result
+    elif payload.status == "Under Review":
+        result = reimbursement_service.update_status(
+            str(id),
+            ReimbursementStatus.under_review,
+            str(admin.id),
+            reviewed_accepted=False,
+            remarks=payload.remarks
+        )
+        background_tasks.add_task(
+            email_service.send_reimbursement_update,
+            result.employee_email,
+            result.employee_name,
+            "Need Further Clarification",
+            str(result.id),
+            result.remarks
+        )
+        return result
     raise HTTPException(status_code=400, detail="Invalid status")
 
 class MarkPaidRequest(BaseModel):

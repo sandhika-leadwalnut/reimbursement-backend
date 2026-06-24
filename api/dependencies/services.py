@@ -7,6 +7,11 @@ from services.reimbursement import ReimbursementService
 from services.storage import StorageService
 from services.audit import AuditService
 from services.zoho import ZohoExpenseService
+from services.email import EmailService
+
+def get_email_service() -> EmailService:
+    return EmailService()
+
 
 def get_profile_repo(client: Client = Depends(get_db_client)) -> ProfileRepository:
     return ProfileRepository(client)

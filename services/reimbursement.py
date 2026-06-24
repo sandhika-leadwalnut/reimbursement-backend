@@ -38,19 +38,19 @@ class ReimbursementService:
         )
         return result
 
-    def update(self, id: str, data: ReimbursementUpdate, user_id: str) -> Reimbursement:
+    def update(self, id: str, data: ReimbursementUpdate, user_id: str, document_url: str = None) -> Reimbursement:
         existing = self.repository.get_by_id(id)
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
 
-        # if employee is updating, ensure it's pending review or need_further_clarification
-        if str(existing.employee_id) == user_id and existing.status not in [ReimbursementStatus.pending_review, ReimbursementStatus.need_further_clarification]:
-             raise HTTPException(status_code=400, detail="Cannot update unless pending review or need further clarification")
+        # if employee is updating, ensure it's pending review or under_review
+        if str(existing.employee_id) == user_id and existing.status not in [ReimbursementStatus.pending_review, ReimbursementStatus.under_review]:
+             raise HTTPException(status_code=400, detail="Cannot update unless pending review or under review")
 
-        # Automatically update status back to under review if it was clarified
+        # Note: We keep status as under review unless specifically changed.
         update_data = data.model_dump(mode='json', exclude_unset=True)
-        if existing.status == ReimbursementStatus.need_further_clarification:
-            update_data["status"] = ReimbursementStatus.under_review.value
+        if document_url:
+            update_data["document_url"] = document_url
         if not update_data:
             return existing
 
@@ -58,7 +58,7 @@ class ReimbursementService:
         
         self.audit_service.log_action(
             reimbursement_id=result.id,
-            action=AuditAction.update if existing.status != ReimbursementStatus.need_further_clarification else AuditAction.clarification_updated,
+            action=AuditAction.update if existing.status != ReimbursementStatus.under_review else AuditAction.clarification_updated,
             old_value=existing.model_dump(mode='json'),
             new_value=result.model_dump(mode='json'),
             performed_by=uuid.UUID(user_id)
@@ -81,7 +81,7 @@ class ReimbursementService:
             action = AuditAction.approve
         elif status == ReimbursementStatus.rejected:
             action = AuditAction.reject
-        elif status == ReimbursementStatus.need_further_clarification:
+        elif status == ReimbursementStatus.under_review and kwargs.get('remarks'):
             action = AuditAction.clarification_requested
 
         self.audit_service.log_action(
