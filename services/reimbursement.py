@@ -47,10 +47,12 @@ class ReimbursementService:
         if str(existing.employee_id) == user_id and existing.status not in [ReimbursementStatus.pending_review, ReimbursementStatus.under_review]:
              raise HTTPException(status_code=400, detail="Cannot update unless pending review or under review")
 
-        # Note: We keep status as under review unless specifically changed.
+        # Automatically update status back to pending review if it was clarified
         update_data = data.model_dump(mode='json', exclude_unset=True)
         if document_url:
             update_data["document_url"] = document_url
+        if existing.status == ReimbursementStatus.under_review:
+            update_data["status"] = ReimbursementStatus.pending_review.value
         if not update_data:
             return existing
 
@@ -81,7 +83,7 @@ class ReimbursementService:
             action = AuditAction.approve
         elif status == ReimbursementStatus.rejected:
             action = AuditAction.reject
-        elif status == ReimbursementStatus.under_review and kwargs.get('remarks'):
+        elif status == ReimbursementStatus.under_review:
             action = AuditAction.clarification_requested
 
         self.audit_service.log_action(

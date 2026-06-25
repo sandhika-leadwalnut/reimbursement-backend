@@ -21,7 +21,7 @@ async def run_zoho_sync(reimbursement: Reimbursement, zoho_service: ZohoExpenseS
         zoho_id = response.get("expense", {}).get("expense_id")
         reimbursement_service.update_status(
             str(reimbursement.id),
-            ReimbursementStatus.sent_to_zoho,
+            ReimbursementStatus.approved,
             admin_id,
             zoho_expense_id=zoho_id,
             zoho_sync_status="success"
@@ -120,7 +120,7 @@ def mark_paid(
 ):
     return reimbursement_service.update_status(
         str(id),
-        ReimbursementStatus.paid,
+        ReimbursementStatus.approved,
         str(admin.id),
         paid_on=payload.paid_on
     )
@@ -144,8 +144,6 @@ def get_dashboard_metrics(
         pending_review=0,
         under_review=0,
         approved=0,
-        sent_to_zoho=0,
-        paid=0,
         rejected=0,
         total_amount=0.0,
         total_approved_amount=0.0
@@ -162,10 +160,6 @@ def get_dashboard_metrics(
             metrics.under_review += 1
         elif r.status == ReimbursementStatus.approved:
             metrics.approved += 1
-        elif r.status == ReimbursementStatus.sent_to_zoho:
-            metrics.sent_to_zoho += 1
-        elif r.status == ReimbursementStatus.paid:
-            metrics.paid += 1
         elif r.status == ReimbursementStatus.rejected:
             metrics.rejected += 1
 

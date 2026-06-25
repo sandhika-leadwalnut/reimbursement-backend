@@ -8,8 +8,6 @@ class ReimbursementStatus(str, Enum):
     pending_review = "Pending Review"
     under_review = "Under Review"
     approved = "Approved"
-    sent_to_zoho = "Sent To Zoho"
-    paid = "Paid"
     rejected = "Rejected"
 
 class AuditAction(str, Enum):
