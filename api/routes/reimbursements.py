@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import date
 from schemas.reimbursement import Reimbursement, ReimbursementCreate, ReimbursementUpdate
@@ -68,13 +68,34 @@ def get_reimbursement(
     return reimbursement
 
 @router.put("/{id}", response_model=Reimbursement)
-def update_reimbursement(
+async def update_reimbursement(
     id: UUID,
-    data: ReimbursementUpdate,
+    request_date: Optional[date] = Form(None),
+    business_category: Optional[str] = Form(None),
+    nature_of_expense: Optional[str] = Form(None),
+    bill_number: Optional[str] = Form(None),
+    bill_date: Optional[date] = Form(None),
+    amount: Optional[float] = Form(None),
+    brief_description: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     user = Depends(get_current_user),
-    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service)
+    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
+    storage_service: StorageService = Depends(get_storage_service)
 ):
-    return reimbursement_service.update(str(id), data, str(user.id))
+    kwargs = {}
+    if request_date is not None: kwargs["request_date"] = request_date
+    if business_category is not None: kwargs["business_category"] = business_category
+    if nature_of_expense is not None: kwargs["nature_of_expense"] = nature_of_expense
+    if brief_description is not None: kwargs["brief_description"] = brief_description
+    if bill_number is not None: kwargs["bill_number"] = bill_number
+    if bill_date is not None: kwargs["bill_date"] = bill_date
+    if amount is not None: kwargs["amount"] = amount
+
+    update_data = ReimbursementUpdate(**kwargs)
+    document_url = None
+    if file:
+        document_url = await storage_service.upload_file(file)
+    return reimbursement_service.update(str(id), update_data, str(user.id), document_url=document_url)
 
 @router.delete("/{id}", status_code=204)
 def delete_reimbursement(

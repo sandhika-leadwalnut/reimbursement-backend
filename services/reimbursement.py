@@ -38,7 +38,7 @@ class ReimbursementService:
         )
         return result
 
-    def update(self, id: str, data: ReimbursementUpdate, user_id: str) -> Reimbursement:
+    def update(self, id: str, data: ReimbursementUpdate, user_id: str, document_url: str = None) -> Reimbursement:
         existing = self.repository.get_by_id(id)
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
@@ -49,6 +49,8 @@ class ReimbursementService:
 
         # Automatically update status back to pending review if it was clarified
         update_data = data.model_dump(mode='json', exclude_unset=True)
+        if document_url:
+            update_data["document_url"] = document_url
         if existing.status == ReimbursementStatus.under_review:
             update_data["status"] = ReimbursementStatus.pending_review.value
         if not update_data:
