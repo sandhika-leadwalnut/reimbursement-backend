@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     ZOHO_CLIENT_SECRET: str = ""
     ZOHO_ORGANIZATION_ID: str = ""
 
-    RESEND_API_KEY: str = ""
+    BREVO_API_KEY: str = ""
+    FROM_EMAIL: str = "karthik@leadwalnut.com"
     FRONTEND_URL: str = "http://localhost:3000"
 
     ADMIN_EMAILS: str = ""

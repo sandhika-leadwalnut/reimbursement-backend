@@ -1,4 +1,8 @@
-import resend
+from brevo import Brevo
+from brevo.transactional_emails import (
+    SendTransacEmailRequestSender,
+    SendTransacEmailRequestToItem,
+)
 import logging
 from core.config import settings
 
@@ -6,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
-        resend.api_key = settings.RESEND_API_KEY
         self.frontend_url = settings.FRONTEND_URL.rstrip('/')
-        # When testing without a verified domain, onboarding@resend.dev is allowed.
-        # But normally you would use your verified domain here.
-        self.from_email = "onboarding@resend.dev"
+        self.from_email = settings.FROM_EMAIL
+        
+        # Initialize Brevo client
+        self.client = Brevo(api_key=settings.BREVO_API_KEY) if settings.BREVO_API_KEY else None
 
     def send_reimbursement_update(
         self,
@@ -21,8 +25,8 @@ class EmailService:
         remarks: str = None,
         expected_payment_date: str = None
     ):
-        if not settings.RESEND_API_KEY:
-            logger.warning("RESEND_API_KEY is not set. Skipping email send.")
+        if not self.client:
+            logger.warning("BREVO_API_KEY is not set. Skipping email send.")
             return
 
         subject = f"Reimbursement Status Update: {status}"
@@ -53,13 +57,21 @@ class EmailService:
             return
 
         try:
-            params = {
-                "from": self.from_email,
-                "to": to_email,
-                "subject": subject,
-                "html": html_content
-            }
-            resend.Emails.send(params)
+            self.client.transactional_emails.send_transac_email(
+                html_content=html_content,
+                sender=SendTransacEmailRequestSender(
+                    email=self.from_email,
+                    name="Leadwalnut Finance"
+                ),
+                subject=subject,
+                to=[
+                    SendTransacEmailRequestToItem(
+                        email=to_email,
+                        name=name
+                    )
+                ]
+            )
             logger.info(f"Successfully sent {status} email to {to_email}")
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            logger.error(f"Failed to send email to {to_email} via Brevo API: {str(e)}")
+
