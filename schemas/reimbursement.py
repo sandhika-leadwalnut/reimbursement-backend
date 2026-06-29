@@ -31,7 +31,8 @@ class Reimbursement(ReimbursementBase):
     employee_name: str
     employee_email: EmailStr
     submission_date: date
-    document_url: str
+    document_url: Optional[str] = None
+    gdrive_link: Optional[str] = None
     status: ReimbursementStatus
     reviewed_accepted: bool
     expected_payment_date: Optional[date] = None

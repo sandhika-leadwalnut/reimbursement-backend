@@ -31,6 +31,10 @@ class ZohoExpenseService:
             # Content-Type is set automatically by httpx when using files/data
         }
         
+        desc = f"Employee: {reimbursement.employee_name}\nDescription: {reimbursement.brief_description or reimbursement.nature_of_expense}\nAdmin Remarks: {reimbursement.remarks or 'None'}"
+        if getattr(reimbursement, 'gdrive_link', None):
+            desc += f"\nGoogle Drive Link: {reimbursement.gdrive_link}"
+
         expense_data = {
             "date": reimbursement.bill_date.isoformat(),
             "account_id": self._get_account_id_for_expense(reimbursement.nature_of_expense),
@@ -41,12 +45,12 @@ class ZohoExpenseService:
             "gst_treatment": settings.ZOHO_DEFAULT_GST_TREATMENT,
             "source_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
             "destination_of_supply": settings.ZOHO_DEFAULT_SOURCE_OF_SUPPLY,
-            "description": f"Employee: {reimbursement.employee_name}\nDescription: {reimbursement.brief_description or reimbursement.nature_of_expense}\nAdmin Remarks: {reimbursement.remarks or 'None'}"
+            "description": desc
         }
 
         async with httpx.AsyncClient() as client:
             files = {}
-            if reimbursement.document_url:
+            if reimbursement.document_url and not getattr(reimbursement, 'gdrive_link', None):
                 try:
                     # Fetch document content to upload
                     doc_response = await client.get(reimbursement.document_url)
