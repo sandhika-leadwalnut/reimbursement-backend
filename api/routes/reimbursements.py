@@ -29,7 +29,8 @@ async def create_reimbursement(
     bill_date: date = Form(...),
     amount: float = Form(...),
     brief_description: str = Form(None),
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    gdrive_link: Optional[str] = Form(None),
     user = Depends(get_current_user),
     reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
     storage_service: StorageService = Depends(get_storage_service)
@@ -37,7 +38,12 @@ async def create_reimbursement(
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
 
-    document_url = await storage_service.upload_file(file)
+    if not file and not gdrive_link:
+        raise HTTPException(status_code=400, detail="Either file or gdrive_link must be provided")
+
+    document_url = None
+    if file:
+        document_url = await storage_service.upload_file(file)
 
     data = ReimbursementCreate(
         request_date=request_date,
@@ -54,7 +60,8 @@ async def create_reimbursement(
         employee_id=str(user.id),
         employee_email=user.email,
         employee_name=user.user_metadata.get('full_name', 'Unknown User'),
-        document_url=document_url
+        document_url=document_url,
+        gdrive_link=gdrive_link
     )
 
 @router.get("/{id}", response_model=Reimbursement)
@@ -78,6 +85,7 @@ async def update_reimbursement(
     amount: Optional[float] = Form(None),
     brief_description: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    gdrive_link: Optional[str] = Form(None),
     user = Depends(get_current_user),
     reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
     storage_service: StorageService = Depends(get_storage_service)
@@ -95,7 +103,7 @@ async def update_reimbursement(
     document_url = None
     if file:
         document_url = await storage_service.upload_file(file)
-    return reimbursement_service.update(str(id), update_data, str(user.id), document_url=document_url)
+    return reimbursement_service.update(str(id), update_data, str(user.id), document_url=document_url, gdrive_link=gdrive_link)
 
 @router.delete("/{id}", status_code=204)
 def delete_reimbursement(

@@ -14,7 +14,7 @@ class ReimbursementService:
         self.repository = repository
         self.audit_service = audit_service
 
-    def create(self, data: ReimbursementCreate, employee_id: str, employee_email: str, employee_name: str, document_url: str) -> Reimbursement:
+    def create(self, data: ReimbursementCreate, employee_id: str, employee_email: str, employee_name: str, document_url: str = None, gdrive_link: str = None) -> Reimbursement:
         today = datetime.utcnow().date()
         payment_date = calculate_payment_date(today)
 
@@ -24,6 +24,7 @@ class ReimbursementService:
             "employee_email": employee_email,
             "employee_name": employee_name,
             "document_url": document_url,
+            "gdrive_link": gdrive_link,
             "status": ReimbursementStatus.pending_review.value,
             "expected_payment_date": payment_date.isoformat(),
         })
@@ -38,7 +39,7 @@ class ReimbursementService:
         )
         return result
 
-    def update(self, id: str, data: ReimbursementUpdate, user_id: str, document_url: str = None) -> Reimbursement:
+    def update(self, id: str, data: ReimbursementUpdate, user_id: str, document_url: str = None, gdrive_link: str = None) -> Reimbursement:
         existing = self.repository.get_by_id(id)
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
@@ -51,6 +52,8 @@ class ReimbursementService:
         update_data = data.model_dump(mode='json', exclude_unset=True)
         if document_url:
             update_data["document_url"] = document_url
+        if gdrive_link is not None:
+            update_data["gdrive_link"] = gdrive_link
         if existing.status == ReimbursementStatus.under_review:
             update_data["status"] = ReimbursementStatus.pending_review.value
         if not update_data:
