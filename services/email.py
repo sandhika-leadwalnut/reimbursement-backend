@@ -23,7 +23,8 @@ class EmailService:
         status: str,
         reimbursement_id: str,
         remarks: str = None,
-        expected_payment_date: str = None
+        expected_payment_date: str = None,
+        approved_amount: float = None
     ):
         if not self.client:
             logger.warning("BREVO_API_KEY is not set. Skipping email send.")
@@ -32,9 +33,11 @@ class EmailService:
         subject = f"Reimbursement Status Update: {status}"
         
         if status == "Approved":
+            amount_text = f"<p><strong>Approved Amount:</strong> {approved_amount}</p>" if approved_amount is not None else ""
             html_content = f"""
             <h2>Hello {name},</h2>
             <p>Your reimbursement request has been <strong>approved</strong>.</p>
+            {amount_text}
             <p><strong>Expected date of payment:</strong> {expected_payment_date}</p>
             <p>Remarks: {remarks or 'None'}</p>
             """

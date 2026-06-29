@@ -69,7 +69,8 @@ def update_reimbursement_status(
             "Approved",
             str(result.id),
             result.remarks,
-            result.expected_payment_date.isoformat() if result.expected_payment_date else None
+            result.expected_payment_date.isoformat() if result.expected_payment_date else None,
+            result.approved_amount
         )
         return result
     elif payload.status == "Rejected":
