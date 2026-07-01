@@ -40,6 +40,7 @@ class StatusUpdateRequest(BaseModel):
     status: str
     remarks: str | None = None
     approved_amount: float | None = None
+    expected_payment_date: str | None = None
 
 @router.put("/reimbursements/{id}/status", response_model=Reimbursement)
 def update_reimbursement_status(
@@ -58,7 +59,8 @@ def update_reimbursement_status(
             str(admin.id),
             reviewed_accepted=True,
             remarks=payload.remarks,
-            approved_amount=payload.approved_amount
+            approved_amount=payload.approved_amount,
+            expected_payment_date=payload.expected_payment_date
         )
         background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
         
