@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,11 +6,13 @@ from api.routes import auth, reimbursements, admin
 from api import oauth
 from core.config import settings
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Reimbursement Management API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
+    allow_origins=[settings.FRONTEND_URL.rstrip('/')],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -17,10 +20,10 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Log exception here
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"message": "Internal server error", "detail": str(exc)},
+        content={"message": "Internal server error"},
     )
 
 app.include_router(auth.router)
