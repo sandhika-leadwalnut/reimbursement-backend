@@ -67,6 +67,7 @@ async def create_reimbursement(
 @router.get("/{id}", response_model=Reimbursement)
 def get_reimbursement(
     id: UUID,
+    user = Depends(get_current_user),
     repo: ReimbursementRepository = Depends(get_reimbursement_repo)
 ):
     reimbursement = repo.get_by_id(str(id))
@@ -117,6 +118,7 @@ def delete_reimbursement(
 @router.get("/{id}/audit", response_model=List[AuditLog])
 def get_reimbursement_audit_logs(
     id: UUID,
+    user = Depends(get_current_user),
     repo: AuditLogRepository = Depends(get_audit_repo)
 ):
     return repo.get_by_reimbursement(str(id))
