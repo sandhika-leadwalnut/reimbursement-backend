@@ -15,7 +15,7 @@ app.add_middleware(
     allow_origins=[settings.FRONTEND_URL.rstrip('/')],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 @app.exception_handler(Exception)
