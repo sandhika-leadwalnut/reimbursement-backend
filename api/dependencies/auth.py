@@ -1,32 +1,19 @@
-from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import Client
 from core.supabase import get_supabase_client
 from core.config import settings
-
-security = HTTPBearer(auto_error=False)
 
 ACCESS_COOKIE_NAME = "sb_access_token"
 REFRESH_COOKIE_NAME = "sb_refresh_token"
 CSRF_HEADER_NAME = "X-Requested-With"
 
-# TODO(auth-bff-cleanup, phase 3): remove HTTPBearer/security and the
-# `credentials` branch below once the frontend is fully on cookies.
-def get_token(
-    request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> str:
-    if credentials:
-        return credentials.credentials
-
+def get_token(request: Request) -> str:
     cookie_token = request.cookies.get(ACCESS_COOKIE_NAME)
-    if cookie_token:
-        if CSRF_HEADER_NAME not in request.headers:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required header")
-        return cookie_token
-
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not cookie_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if CSRF_HEADER_NAME not in request.headers:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required header")
+    return cookie_token
 
 def get_db_client(token: str = Depends(get_token)) -> Client:
     client = get_supabase_client(token)
