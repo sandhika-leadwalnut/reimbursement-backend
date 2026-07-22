@@ -54,5 +54,7 @@ class DashboardMetrics(BaseModel):
     under_review: int
     approved: int
     rejected: int
+    paid: int
     total_amount: float
     total_approved_amount: float
+    total_paid_amount: float
