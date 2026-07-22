@@ -123,9 +123,9 @@ def mark_paid(
 ):
     return reimbursement_service.update_status(
         str(id),
-        ReimbursementStatus.approved,
+        ReimbursementStatus.paid,
         str(admin.id),
-        paid_on=payload.paid_on
+        paid_on=payload.paid_on.isoformat()
     )
 
 @router.get("/reimbursements", response_model=List[Reimbursement])
@@ -148,8 +148,10 @@ def get_dashboard_metrics(
         under_review=0,
         approved=0,
         rejected=0,
+        paid=0,
         total_amount=0.0,
-        total_approved_amount=0.0
+        total_approved_amount=0.0,
+        total_paid_amount=0.0
     )
 
     for r in active:
@@ -165,5 +167,8 @@ def get_dashboard_metrics(
             metrics.approved += 1
         elif r.status == ReimbursementStatus.rejected:
             metrics.rejected += 1
+        elif r.status == ReimbursementStatus.paid:
+            metrics.paid += 1
+            metrics.total_paid_amount += r.approved_amount or r.amount
 
     return metrics

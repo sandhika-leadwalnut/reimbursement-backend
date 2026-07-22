@@ -75,12 +75,15 @@ class ReimbursementService:
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
 
+        if status == ReimbursementStatus.paid and existing.status != ReimbursementStatus.approved:
+            raise HTTPException(status_code=400, detail="Only approved bills can be marked as paid")
+
         update_data = {"status": status.value}
 
         update_data.update(kwargs)
 
         result = self.repository.update(id, update_data)
-        
+
         action = AuditAction.update
         if status == ReimbursementStatus.approved:
             action = AuditAction.approve
@@ -88,6 +91,8 @@ class ReimbursementService:
             action = AuditAction.reject
         elif status == ReimbursementStatus.under_review:
             action = AuditAction.clarification_requested
+        elif status == ReimbursementStatus.paid:
+            action = AuditAction.payment_update
 
         self.audit_service.log_action(
             reimbursement_id=result.id,

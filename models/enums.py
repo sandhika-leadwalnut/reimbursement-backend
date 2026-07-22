@@ -9,6 +9,7 @@ class ReimbursementStatus(str, Enum):
     under_review = "Under Review"
     approved = "Approved"
     rejected = "Rejected"
+    paid = "Paid"
 
 class AuditAction(str, Enum):
     create = "Create"
