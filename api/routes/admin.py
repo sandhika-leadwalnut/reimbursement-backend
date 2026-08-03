@@ -5,7 +5,7 @@ from schemas.reimbursement import Reimbursement, DashboardMetrics
 from models.enums import ReimbursementStatus
 from services.reimbursement import ReimbursementService
 from services.zoho import ZohoExpenseService
-from api.dependencies.auth import get_current_admin
+from api.dependencies.auth import get_current_admin, get_db_client
 from api.dependencies.services import get_reimbursement_service, get_zoho_service, get_reimbursement_repo, get_email_service
 from services.email import EmailService
 from repositories.impl import ReimbursementRepository
@@ -134,6 +134,22 @@ def get_all_reimbursements(
     repo: ReimbursementRepository = Depends(get_reimbursement_repo)
 ):
     return repo.get_active()
+
+@router.get("/bank-details")
+def get_bank_details(
+    admin = Depends(get_current_admin),
+    client = Depends(get_db_client)
+):
+    """Bank details for the payment sheet export. Served via the backend because
+    the frontend's Supabase client is unauthenticated (auth uses HttpOnly cookies),
+    so RLS would return no rows on direct browser queries."""
+    employees = client.table("employee_bank_details").select(
+        "employee_name, employee_email, bank_name, ifsc_code, account_number"
+    ).execute()
+    vendors = client.table("vendor_bank_details").select(
+        "vendor_name, vendor_email, bank_name, ifsc_code, account_number"
+    ).execute()
+    return {"employees": employees.data or [], "vendors": vendors.data or []}
 
 @router.get("/dashboard", response_model=DashboardMetrics)
 def get_dashboard_metrics(
