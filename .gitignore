@@ -38,3 +38,9 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+# Generated documentation exports (kept in Drive, not in git)
+docs/*.docx
+docs/*.pdf
+docs/*.pptx
+~$*.docx
