@@ -40,7 +40,9 @@ class StatusUpdateRequest(BaseModel):
     status: str
     remarks: str | None = None
     approved_amount: float | None = None
-    expected_payment_date: str | None = None
+    # expected_payment_date is intentionally absent. It is derived from the payment
+    # cycle at submission (utils/payment_calc.py) and is not admin-editable:
+    # overriding it desynced the payment sheet from the actual payment run.
 
 @router.put("/reimbursements/{id}/status", response_model=Reimbursement)
 def update_reimbursement_status(
@@ -59,8 +61,7 @@ def update_reimbursement_status(
             str(admin.id),
             reviewed_accepted=True,
             remarks=payload.remarks,
-            approved_amount=payload.approved_amount,
-            expected_payment_date=payload.expected_payment_date
+            approved_amount=payload.approved_amount
         )
         background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
         
@@ -118,15 +119,30 @@ class MarkPaidRequest(BaseModel):
 def mark_paid(
     id: UUID,
     payload: MarkPaidRequest,
+    background_tasks: BackgroundTasks,
     admin = Depends(get_current_admin),
-    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service)
+    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
+    email_service: EmailService = Depends(get_email_service)
 ):
-    return reimbursement_service.update_status(
+    result = reimbursement_service.update_status(
         str(id),
         ReimbursementStatus.paid,
         str(admin.id),
         paid_on=payload.paid_on.isoformat()
     )
+
+    # Amount paid is the approved amount, which may be lower than the claim.
+    background_tasks.add_task(
+        email_service.send_payment_confirmation,
+        result.employee_email,
+        result.employee_name,
+        result.bill_number,
+        result.nature_of_expense,
+        result.approved_amount if result.approved_amount is not None else result.amount,
+        result.paid_on.isoformat() if result.paid_on else payload.paid_on.isoformat()
+    )
+
+    return result
 
 @router.get("/reimbursements", response_model=List[Reimbursement])
 def get_all_reimbursements(
