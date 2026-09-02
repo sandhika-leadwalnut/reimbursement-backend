@@ -144,6 +144,64 @@ def mark_paid(
 
     return result
 
+class BulkMarkPaidRequest(BaseModel):
+    ids: List[UUID]
+    paid_on: date
+
+@router.post("/reimbursements/bulk-mark-paid")
+def bulk_mark_paid(
+    payload: BulkMarkPaidRequest,
+    background_tasks: BackgroundTasks,
+    admin = Depends(get_current_admin),
+    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
+    email_service: EmailService = Depends(get_email_service)
+):
+    """Mark many approved reimbursements paid in one call, after a bank payment run.
+
+    Each row is processed independently: one failure (e.g. a row that isn't
+    Approved) doesn't abort the rest, and the response reports both outcomes so the
+    admin can see exactly what happened. Rows already updated stay updated.
+    """
+    if not payload.ids:
+        raise HTTPException(status_code=400, detail="No reimbursements selected")
+
+    if len(payload.ids) > 200:
+        raise HTTPException(status_code=400, detail="Cannot mark more than 200 records at once")
+
+    updated = []
+    failed = []
+
+    for reimbursement_id in payload.ids:
+        try:
+            result = reimbursement_service.update_status(
+                str(reimbursement_id),
+                ReimbursementStatus.paid,
+                str(admin.id),
+                paid_on=payload.paid_on.isoformat()
+            )
+            updated.append(str(result.id))
+
+            background_tasks.add_task(
+                email_service.send_payment_confirmation,
+                result.employee_email,
+                result.employee_name,
+                result.bill_number,
+                result.nature_of_expense,
+                result.approved_amount if result.approved_amount is not None else result.amount,
+                result.paid_on.isoformat() if result.paid_on else payload.paid_on.isoformat()
+            )
+        except HTTPException as e:
+            failed.append({"id": str(reimbursement_id), "error": e.detail})
+        except Exception as e:
+            failed.append({"id": str(reimbursement_id), "error": str(e)})
+
+    return {
+        "updated_count": len(updated),
+        "failed_count": len(failed),
+        "updated": updated,
+        "failed": failed,
+    }
+
 @router.get("/reimbursements", response_model=List[Reimbursement])
 def get_all_reimbursements(
     admin = Depends(get_current_admin),
