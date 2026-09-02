@@ -9,6 +9,12 @@ from repositories.impl import ReimbursementRepository
 from services.audit import AuditService
 from utils.payment_calc import calculate_payment_date
 
+# Statuses an employee may still edit. Mirrored on the client in src/lib/status.ts.
+EDITABLE_STATUSES = [
+    ReimbursementStatus.pending_review,
+    ReimbursementStatus.under_review,
+]
+
 class ReimbursementService:
     def __init__(self, repository: ReimbursementRepository, audit_service: AuditService):
         self.repository = repository
@@ -44,9 +50,18 @@ class ReimbursementService:
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
 
-        # if employee is updating, ensure it's pending review or under_review
-        if str(existing.employee_id) == user_id and existing.status not in [ReimbursementStatus.pending_review, ReimbursementStatus.under_review]:
-             raise HTTPException(status_code=400, detail="Cannot update unless pending review or under review")
+        # Editing is only allowed while the request is still in play. Once it is
+        # Approved or Paid the amount may already sit in a bank payment sheet and in
+        # the Zoho Books ledger, so a later edit would silently desync all three.
+        # Rejected requests are closed and must be resubmitted rather than amended.
+        #
+        # This is enforced for every caller, not just the owner: admins change state
+        # through /admin/reimbursements/{id}/status, never through this path.
+        if existing.status not in EDITABLE_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail=f"This request is {existing.status.value} and can no longer be edited.",
+            )
 
         # Automatically update status back to pending review if it was clarified
         update_data = data.model_dump(mode='json', exclude_unset=True)

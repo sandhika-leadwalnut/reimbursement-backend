@@ -5,7 +5,7 @@ from schemas.reimbursement import Reimbursement, DashboardMetrics
 from models.enums import ReimbursementStatus
 from services.reimbursement import ReimbursementService
 from services.zoho import ZohoExpenseService
-from api.dependencies.auth import get_current_admin
+from api.dependencies.auth import get_current_admin, get_db_client
 from api.dependencies.services import get_reimbursement_service, get_zoho_service, get_reimbursement_repo, get_email_service
 from services.email import EmailService
 from repositories.impl import ReimbursementRepository
@@ -40,7 +40,9 @@ class StatusUpdateRequest(BaseModel):
     status: str
     remarks: str | None = None
     approved_amount: float | None = None
-    expected_payment_date: str | None = None
+    # expected_payment_date is intentionally absent. It is derived from the payment
+    # cycle at submission (utils/payment_calc.py) and is not admin-editable:
+    # overriding it desynced the payment sheet from the actual payment run.
 
 @router.put("/reimbursements/{id}/status", response_model=Reimbursement)
 def update_reimbursement_status(
@@ -59,8 +61,7 @@ def update_reimbursement_status(
             str(admin.id),
             reviewed_accepted=True,
             remarks=payload.remarks,
-            approved_amount=payload.approved_amount,
-            expected_payment_date=payload.expected_payment_date
+            approved_amount=payload.approved_amount
         )
         background_tasks.add_task(run_zoho_sync, result, zoho_service, reimbursement_service, str(admin.id))
         
@@ -118,15 +119,88 @@ class MarkPaidRequest(BaseModel):
 def mark_paid(
     id: UUID,
     payload: MarkPaidRequest,
+    background_tasks: BackgroundTasks,
     admin = Depends(get_current_admin),
-    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service)
+    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
+    email_service: EmailService = Depends(get_email_service)
 ):
-    return reimbursement_service.update_status(
+    result = reimbursement_service.update_status(
         str(id),
         ReimbursementStatus.paid,
         str(admin.id),
         paid_on=payload.paid_on.isoformat()
     )
+
+    # Amount paid is the approved amount, which may be lower than the claim.
+    background_tasks.add_task(
+        email_service.send_payment_confirmation,
+        result.employee_email,
+        result.employee_name,
+        result.bill_number,
+        result.nature_of_expense,
+        result.approved_amount if result.approved_amount is not None else result.amount,
+        result.paid_on.isoformat() if result.paid_on else payload.paid_on.isoformat()
+    )
+
+    return result
+
+class BulkMarkPaidRequest(BaseModel):
+    ids: List[UUID]
+    paid_on: date
+
+@router.post("/reimbursements/bulk-mark-paid")
+def bulk_mark_paid(
+    payload: BulkMarkPaidRequest,
+    background_tasks: BackgroundTasks,
+    admin = Depends(get_current_admin),
+    reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
+    email_service: EmailService = Depends(get_email_service)
+):
+    """Mark many approved reimbursements paid in one call, after a bank payment run.
+
+    Each row is processed independently: one failure (e.g. a row that isn't
+    Approved) doesn't abort the rest, and the response reports both outcomes so the
+    admin can see exactly what happened. Rows already updated stay updated.
+    """
+    if not payload.ids:
+        raise HTTPException(status_code=400, detail="No reimbursements selected")
+
+    if len(payload.ids) > 200:
+        raise HTTPException(status_code=400, detail="Cannot mark more than 200 records at once")
+
+    updated = []
+    failed = []
+
+    for reimbursement_id in payload.ids:
+        try:
+            result = reimbursement_service.update_status(
+                str(reimbursement_id),
+                ReimbursementStatus.paid,
+                str(admin.id),
+                paid_on=payload.paid_on.isoformat()
+            )
+            updated.append(str(result.id))
+
+            background_tasks.add_task(
+                email_service.send_payment_confirmation,
+                result.employee_email,
+                result.employee_name,
+                result.bill_number,
+                result.nature_of_expense,
+                result.approved_amount if result.approved_amount is not None else result.amount,
+                result.paid_on.isoformat() if result.paid_on else payload.paid_on.isoformat()
+            )
+        except HTTPException as e:
+            failed.append({"id": str(reimbursement_id), "error": e.detail})
+        except Exception as e:
+            failed.append({"id": str(reimbursement_id), "error": str(e)})
+
+    return {
+        "updated_count": len(updated),
+        "failed_count": len(failed),
+        "updated": updated,
+        "failed": failed,
+    }
 
 @router.get("/reimbursements", response_model=List[Reimbursement])
 def get_all_reimbursements(
@@ -134,6 +208,22 @@ def get_all_reimbursements(
     repo: ReimbursementRepository = Depends(get_reimbursement_repo)
 ):
     return repo.get_active()
+
+@router.get("/bank-details")
+def get_bank_details(
+    admin = Depends(get_current_admin),
+    client = Depends(get_db_client)
+):
+    """Bank details for the payment sheet export. Served via the backend because
+    the frontend's Supabase client is unauthenticated (auth uses HttpOnly cookies),
+    so RLS would return no rows on direct browser queries."""
+    employees = client.table("employee_bank_details").select(
+        "employee_name, employee_email, bank_name, ifsc_code, account_number"
+    ).execute()
+    vendors = client.table("vendor_bank_details").select(
+        "vendor_name, vendor_email, bank_name, ifsc_code, account_number"
+    ).execute()
+    return {"employees": employees.data or [], "vendors": vendors.data or []}
 
 @router.get("/dashboard", response_model=DashboardMetrics)
 def get_dashboard_metrics(

@@ -6,8 +6,9 @@ from schemas.reimbursement import Reimbursement, ReimbursementCreate, Reimbursem
 from schemas.audit import AuditLog
 from services.reimbursement import ReimbursementService
 from services.storage import StorageService
+from services.email import EmailService
 from api.dependencies.auth import get_current_user
-from api.dependencies.services import get_reimbursement_service, get_storage_service, get_audit_repo, get_reimbursement_repo
+from api.dependencies.services import get_reimbursement_service, get_storage_service, get_audit_repo, get_reimbursement_repo, get_email_service
 from repositories.impl import ReimbursementRepository, AuditLogRepository
 
 router = APIRouter(prefix="/reimbursements", tags=["reimbursements"])
@@ -22,6 +23,7 @@ def get_my_reimbursements(
 
 @router.post("", response_model=Reimbursement)
 async def create_reimbursement(
+    background_tasks: BackgroundTasks,
     request_date: date = Form(...),
     business_category: str = Form(...),
     nature_of_expense: str = Form(...),
@@ -33,7 +35,8 @@ async def create_reimbursement(
     gdrive_link: Optional[str] = Form(None),
     user = Depends(get_current_user),
     reimbursement_service: ReimbursementService = Depends(get_reimbursement_service),
-    storage_service: StorageService = Depends(get_storage_service)
+    storage_service: StorageService = Depends(get_storage_service),
+    email_service: EmailService = Depends(get_email_service)
 ):
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
@@ -55,7 +58,7 @@ async def create_reimbursement(
         amount=amount
     )
 
-    return reimbursement_service.create(
+    result = reimbursement_service.create(
         data=data,
         employee_id=str(user.id),
         employee_email=user.email,
@@ -63,6 +66,20 @@ async def create_reimbursement(
         document_url=document_url,
         gdrive_link=gdrive_link
     )
+
+    # Sent in the background so a Brevo outage can never block a submission.
+    background_tasks.add_task(
+        email_service.send_submission_confirmation,
+        result.employee_email,
+        result.employee_name,
+        result.bill_number,
+        result.nature_of_expense,
+        result.amount,
+        result.request_date.isoformat() if result.request_date else None,
+        result.expected_payment_date.isoformat() if result.expected_payment_date else None
+    )
+
+    return result
 
 @router.get("/{id}", response_model=Reimbursement)
 def get_reimbursement(
